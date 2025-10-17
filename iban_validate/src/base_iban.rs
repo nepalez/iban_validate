@@ -7,6 +7,8 @@ use core::str::FromStr;
 use core::{convert::TryFrom, error::Error};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+#[cfg(feature = "zeroize")]
+use zeroize_derive::Zeroize;
 
 /// The size of a group of characters in the paper format.
 const PAPER_GROUP_SIZE: usize = 4;
@@ -86,6 +88,7 @@ const MAX_IBAN_LEN: usize = 34;
 /// # Ok::<(), ParseBaseIbanError>(())
 /// ```
 #[derive(Copy, Clone, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "zeroize", derive(Zeroize))]
 pub struct BaseIban {
     /// The string representing the IBAN. The string contains only uppercase
     /// ASCII and digits and no whitespace. It starts with two letters followed
