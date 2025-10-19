@@ -56,7 +56,7 @@ iban_validate = "5"
 The following features can be used to configure the crate:
 
 - _serde_: Enable `serde` support for [`Iban`] and [`BaseIban`].
-- _zeroize_: Enable `zeroize` support for [`Iban`] and [`BaseIban`].
+- _zeroize_: Enable `zeroize` support for the [`BaseIban`] only.
 
 ## Contributing
 
