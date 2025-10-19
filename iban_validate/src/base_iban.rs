@@ -8,6 +8,8 @@ use core::{convert::TryFrom, error::Error};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 #[cfg(feature = "zeroize")]
+use zeroize::Zeroize;
+#[cfg(feature = "zeroize")]
 use zeroize_derive::Zeroize;
 
 /// The size of a group of characters in the paper format.
@@ -264,6 +266,9 @@ impl BaseIban {
     /// Parse a standardized IBAN string from an iterator. We iterate through
     /// bytes, not characters. When a character is not ASCII, the IBAN is
     /// automatically invalid.
+    ///
+    /// SECURITY: If the `zeroized` feature is turned on, then all temporary
+    /// objects are zeroized in the memory.
     fn try_form_string_from_electronic<T>(
         mut chars: T,
     ) -> Result<ArrayString<MAX_IBAN_LEN>, ParseBaseIbanError>
@@ -275,24 +280,30 @@ impl BaseIban {
         // First expect exactly two uppercase letters and append them to the
         // string.
         for _ in 0..2 {
-            let c = chars
-                .next()
-                .filter(u8::is_ascii_uppercase)
-                .ok_or(ParseBaseIbanError::InvalidFormat)?;
-            address_no_spaces
-                .try_push(c as char)
-                .map_err(|_| ParseBaseIbanError::InvalidFormat)?;
+            let Some(c) = chars.next().filter(u8::is_ascii_uppercase) else {
+                #[cfg(feature = "zeroize")]
+                address_no_spaces.zeroize();
+                return Err(ParseBaseIbanError::InvalidFormat);
+            };
+            if address_no_spaces.try_push(c as char).is_err() {
+                #[cfg(feature = "zeroize")]
+                address_no_spaces.zeroize();
+                return Err(ParseBaseIbanError::InvalidFormat);
+            }
         }
 
         // Now expect exactly two digits.
         for _ in 0..2 {
-            let c = chars
-                .next()
-                .filter(u8::is_ascii_digit)
-                .ok_or(ParseBaseIbanError::InvalidFormat)?;
-            address_no_spaces
-                .try_push(c as char)
-                .map_err(|_| ParseBaseIbanError::InvalidFormat)?;
+            let Some(c) = chars.next().filter(u8::is_ascii_digit) else {
+                #[cfg(feature = "zeroize")]
+                address_no_spaces.zeroize();
+                return Err(ParseBaseIbanError::InvalidFormat);
+            };
+            if address_no_spaces.try_push(c as char).is_err() {
+                #[cfg(feature = "zeroize")]
+                address_no_spaces.zeroize();
+                return Err(ParseBaseIbanError::InvalidFormat);
+            }
         }
 
         // Finally take up to 30 other characters. The BBAN part can actually
@@ -301,10 +312,14 @@ impl BaseIban {
         // destination string.
         for c in chars {
             if c.is_ascii_alphanumeric() {
-                address_no_spaces
-                    .try_push(c.to_ascii_uppercase() as char)
-                    .map_err(|_| ParseBaseIbanError::InvalidFormat)?;
+                if address_no_spaces.try_push(c.to_ascii_uppercase() as char).is_err() {
+                    #[cfg(feature = "zeroize")]
+                    address_no_spaces.zeroize();
+                    return Err(ParseBaseIbanError::InvalidFormat);
+                }
             } else {
+                #[cfg(feature = "zeroize")]
+                address_no_spaces.zeroize();
                 return Err(ParseBaseIbanError::InvalidFormat);
             }
         }
@@ -360,11 +375,13 @@ impl FromStr for BaseIban {
     /// invalid, an [`ParseBaseIbanError`](crate::ParseBaseIbanError) will be
     /// returned.
     fn from_str(address: &str) -> Result<Self, Self::Err> {
-        let address_no_spaces =
+        let mut address_no_spaces =
             BaseIban::try_form_string_from_electronic(address.as_bytes().iter().copied())
                 .or_else(|_| BaseIban::try_form_string_from_pretty_print(address))?;
 
         if !BaseIban::validate_checksum(&address_no_spaces) {
+            #[cfg(feature = "zeroize")]
+            address_no_spaces.zeroize();
             return Err(ParseBaseIbanError::InvalidChecksum);
         }
 
